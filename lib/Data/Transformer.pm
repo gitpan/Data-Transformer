@@ -1,7 +1,7 @@
 package Data::Transformer;
 use strict;
 
-our $VERSION = 0.02;
+our $VERSION = 0.03;
 
 ################ CONSTRUCTOR ################
 
@@ -30,16 +30,13 @@ sub _node {
 	my ($self,$data) = @_;
 	die "Maximum node calls ($self->{node_limit}) reached" 
 	  if $self->{_node_calls}++ > $self->{node_limit};
-	if ($self->{_seen}->{"$data"}++) {
-		# warn "Circular data structure detected: $data at node ".$self->{_node_calls}." - skipping\n";
-		return;
-	}
 
 	my $ref = ref $data;
 	my ($cb_ret,$node_ret);
 
 	# Filter data
 	if ($ref) {
+		return if $self->{_seen}->{"$data"}++; # circular data structure!
 		$cb_ret = $self->{lc($ref)}->($data) if $self->{lc($ref)};
 	} else {
 		$cb_ret = $self->{normal}->(\$data) if $self->{normal};
