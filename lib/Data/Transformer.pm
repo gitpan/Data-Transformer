@@ -1,7 +1,7 @@
 package Data::Transformer;
 use strict;
 
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 ################ CONSTRUCTOR ################
 
@@ -19,6 +19,7 @@ sub new {
 sub traverse {
 	my ($self,$data) = @_;
 	die "Data needs to be a reference" unless ref $data;
+	$self->{_seen} = {};
 	$self->_node($data);
 	return $self->{_node_calls};
 }
@@ -29,6 +30,10 @@ sub _node {
 	my ($self,$data) = @_;
 	die "Maximum node calls ($self->{node_limit}) reached" 
 	  if $self->{_node_calls}++ > $self->{node_limit};
+	if ($self->{_seen}->{"$data"}++) {
+		# warn "Circular data structure detected: $data at node ".$self->{_node_calls}." - skipping\n";
+		return;
+	}
 
 	my $ref = ref $data;
 	my ($cb_ret,$node_ret);
@@ -230,14 +235,13 @@ coderefs. Also, because of reiteration, complex changes of large data
 structures may require setting the node processing limit higher than
 the default.
 
+=head2 Note on circular references
 
+Data structures containing circular references should not cause
+problems. Data::Transformer will skip any node containing a reference
+which has already been processed.
 
 =head1 CAVEATS
-
-This module should be quite suitable for hierarchial data structures
-(such as something made by XML::Simple), while anything more
-complicated, especially if it contains circular references, will
-often cause it problems.
 
 It is not feasible to use this module for very large data
 structures. Accordingly, there is a hard node processing boundary of

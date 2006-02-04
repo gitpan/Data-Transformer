@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use Test::More tests => 17;
+use Test::More tests => 28;
 
 ############## PRELIMINARIES #############
 
@@ -9,8 +9,9 @@ my $str = 'abc';
 my $data = {
 			ar => [qw(a b),
 				   [ qw(x y z) ],
+				   sub { $_[0] + $_[1] },
 				   qw(c d e f 1 2 3 4 5 6 7 8),
-				   { hmm=> { x=>'y' }},
+				   { hmm=> { x=>'y', z=>sub{ $_[0] + $_[1] } }},
 				  ],
 			ha => { a   => 1,
 					b   => 2,
@@ -20,6 +21,10 @@ my $data = {
 			gl => \*DATA,
 			sc => \$str,
 };
+# Add a couple of circularities, to make things tougher
+$data->{DATA} = $data;
+$data->{'ha'}->{'circular'} = $data->{'ar'};
+
 
 my %opt;
 # switch case of strings, multiply numbers by 3
@@ -66,8 +71,16 @@ BEGIN { use_ok('Data::Transformer') }
 my $t;
 ok ( $t = Data::Transformer->new(%opt), "new Data::Transformer");
 isa_ok ( $t, 'Data::Transformer');
-can_ok ( $t, qw(traverse));
-ok ( $t->traverse($data) , "traverse() call");
+can_ok ( $t, qw(traverse) );
+
+ok ( limited($data,normal=>sub{}), "limited traverse - normal only");
+ok ( limited($data,hash=>sub{}), "limited traverse - hash only");
+ok ( limited($data,glob=>sub{}), "limited traverse - glob only");
+ok ( limited($data,scalar=>sub{}), "limited traverse - scalar only");
+ok ( limited($data,array=>sub{}), "limited traverse - array only");
+ok ( limited($data,code=>sub{}), "limited coderef only");
+
+ok ( $t->traverse($data) , "comprehensive traverse");
 is ( scalar(grep {not /^KEY/} keys %$data), 0, "key transform" );
 is ( $data->{'KEY:sc'}, "ABC", "case switch 1" );
 is ( $data->{'KEY:st'}, "all upper case", "case switch 2" );
@@ -80,6 +93,39 @@ is ( $data->{'KEY:ha'}->{'KEY:ar2'}->[-1], "165", "multiplication 3" );
 is ( $data->{'KEY:gl'}, "GNITSET", "glob + reiteration");
 is ( $data->{'KEY:co'}->(3,4), 49, "coderef");
 is ( $data->{'KEY:sc'}, "ABC", "scalar ref + reiteration");
+
+is( deviant($data,1,%opt), "Maximum node calls (1) reached", "small node_limit" );
+is( deviant($data,2**20,%opt), "Cannot set node_limit higher than 2**20-1", "big node_limit" );
+is( deviant($data,0), "Need to specify at least one of", "missing option" );
+is( deviant($data,0,%opt,glob=>1), "The value for the glob option needs to be a coderef", "non-coderef option" );
+is( deviant(1,0,%opt), "Data needs to be a reference", "non-reference data" );
+
+sub deviant {
+	my ($data,$limit,%opt) = @_;
+	my $t;
+	eval {
+		$t = Data::Transformer->new(%opt,node_limit=>$limit);
+		$t->traverse($data);
+	};
+	if ($@) {
+		$@ =~ s/(.*) at.*$/$1/s;
+		$@ =~ s/:.*$//;
+		my $err = $@;
+		return $err;
+	}
+	return "No exception raised??";
+}
+
+sub limited {
+	my ($data,%opt) = @_;
+	my $t;
+	eval {
+		$t = Data::Transformer->new(%opt);
+		$t->traverse($data);
+	};
+	return 0 if $@;
+	return 1;
+}
 
 __END__
 testing
