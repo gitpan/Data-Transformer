@@ -9,3 +9,6 @@ Revision history for Perl module Data::Transformer
 
 0.03 Sat Feb  4 00:25:11 2006
     - small bug fix of changes in 0.02
+
+0.04 Sun Feb  5 03:56:44 GMT 2006
+    - support for object nodes

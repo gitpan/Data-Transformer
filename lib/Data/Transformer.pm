@@ -1,7 +1,7 @@
 package Data::Transformer;
 use strict;
 
-our $VERSION = 0.03;
+our $VERSION = 0.04;
 
 ################ CONSTRUCTOR ################
 
@@ -26,19 +26,26 @@ sub traverse {
 
 ################ PRIVATE METHODS ###############
 
+my %plainref = map { ($_=>1) } qw(ARRAY HASH CODE SCALAR GLOB);
+
 sub _node {
 	my ($self,$data) = @_;
 	die "Maximum node calls ($self->{node_limit}) reached" 
 	  if $self->{_node_calls}++ > $self->{node_limit};
 
-	my $ref = ref $data;
+	my $ref = ref $data || '';
 	my ($cb_ret,$node_ret);
 
+	return if $ref && $self->{_seen}->{"$data"}++; # circular data structure!
+
 	# Filter data
-	if ($ref) {
-		return if $self->{_seen}->{"$data"}++; # circular data structure!
+	if ($plainref{$ref}) { # normal reference
 		$cb_ret = $self->{lc($ref)}->($data) if $self->{lc($ref)};
-	} else {
+	}
+	elsif ($ref) { # blessed reference
+		$cb_ret = $self->{$ref}->($data) if $self->{$ref};
+	}
+	else { # non-reference
 		$cb_ret = $self->{normal}->(\$data) if $self->{normal};
 	}
 
@@ -82,17 +89,16 @@ sub _node {
 
 sub _selfcheck {
 	my $self = shift;
-	my @require_any = qw(normal array hash code scalar glob);
 	my $found = 0;
-	for (@require_any) {
-		if ($self->{$_}) {
-			$found++;
-			die "The value for the $_ option needs to be a coderef"
-			  unless ref $self->{$_} eq 'CODE';
-		}
+	for my $k (keys %$self) {
+		next if $k eq 'node_limit';
+		$found++;
+		die "The value for the '$k' option needs to be a coderef"
+		  unless ref $self->{$k} eq 'CODE';
 	}
-	die "Need to specify at least one of: ".join(', ',@require_any)
-	  unless $found;
+	unless ($found) {
+		die "You need to specify an action for some node type";
+	}
 	$self->{_node_calls} = 0;
 	$self->{node_limit} ||= 2**16;
 	die "Cannot set node_limit higher than 2**20-1"
@@ -156,6 +162,11 @@ Data::Transformer - Traverse a data structure, altering it in place
  print "Number of nodes: $nodes\n";
  print "Size of keys + values: $size\n";
 
+ # D: OBJECTS INSIDE A DATA STRUCTURE
+ # Affect objects by using the class name as a key:
+ my $t = Data::Transformer->new(
+    'My::Class' => sub { shift->set_foo('bar') }
+ );
 
 =head1 DESCRIPTION
 
@@ -179,14 +190,17 @@ data type in question.
 
 The array and hash types are special in that they are traversed into.
 
-Objects (i.e. blessed references) inside the data structure are
-currently ignored, though this may change in later versions.
+It is possible to affect objects inside the data structure by
+specifying a callback keyed to the name of the class they belong
+to. They are not automatically recursed into, however, even if they
+happen to be blessed hash or array references.
 
-Note that a scalar reference is not automatically traversed into, even
-if it may contain a reference to an arrayref or a hashref. To make the
-module traverse into scalar references, you need to return a coderef
-encapsulating a different data type in the scalar handler, thus
-changing them (and prompting a reiteration over that data point).
+Similarly, a scalar reference is not automatically traversed into,
+even if it may contain a reference to an arrayref or a hashref. To
+make the module traverse into scalar references, you need to return a
+coderef encapsulating a different data type in the scalar handler,
+thus changing them (and prompting a reiteration over that data
+point). This applies to objects as well.
 
 =head2 Additional option for the constructor
 
@@ -207,13 +221,14 @@ be different from both the number of nodes in the actual data
 structure and the number of nodes after the transformation, for the
 following reasons:
 
- * Reiteration into a particular node may have occurred (see below),
-   which increments the node count.
+ * Reiteration into a particular node may have occurred, which
+   increments the node count.
 
- * Blessed references (objects) will not be iterated into.
+ * Blessed references (objects) will not normally be iterated into,
+   but are merely treated as leaves in the data structure.
 
- * The processing code passed to the constructor will as often as not
-   affect the number of nodes.
+ * The processing code passed to the constructor may well affect the
+   number of nodes.
 
 
 =head2 Note on data type changes

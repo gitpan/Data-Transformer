@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use Test::More tests => 28;
+use Test::More tests => 29;
 
 ############## PRELIMINARIES #############
 
@@ -20,6 +20,7 @@ my $data = {
 			co => sub { $_[0] + $_[1] },
 			gl => \*DATA,
 			sc => \$str,
+			ob => new DummyObj,
 };
 # Add a couple of circularities, to make things tougher
 $data->{DATA} = $data;
@@ -64,6 +65,11 @@ $opt{scalar} = sub {
 	my $contents = ${ $_[0] };
 	return sub { $contents; }
 };
+# set param of DummyObj obj
+$opt{DummyObj} = sub {
+	shift->param("tested","yes");
+};
+
 
 ############## TESTS #############
 
@@ -93,11 +99,12 @@ is ( $data->{'KEY:ha'}->{'KEY:ar2'}->[-1], "165", "multiplication 3" );
 is ( $data->{'KEY:gl'}, "GNITSET", "glob + reiteration");
 is ( $data->{'KEY:co'}->(3,4), 49, "coderef");
 is ( $data->{'KEY:sc'}, "ABC", "scalar ref + reiteration");
+is ( eval{ $data->{'KEY:ob'}->param("tested") }, "yes", "object node");
 
 is( deviant($data,1,%opt), "Maximum node calls (1) reached", "small node_limit" );
 is( deviant($data,2**20,%opt), "Cannot set node_limit higher than 2**20-1", "big node_limit" );
-is( deviant($data,0), "Need to specify at least one of", "missing option" );
-is( deviant($data,0,%opt,glob=>1), "The value for the glob option needs to be a coderef", "non-coderef option" );
+is( deviant($data,0), "You need to specify an action for some node type", "missing option" );
+is( deviant($data,0,%opt,glob=>1), "The value for the 'glob' option needs to be a coderef", "non-coderef option" );
 is( deviant(1,0,%opt), "Data needs to be a reference", "non-reference data" );
 
 sub deviant {
@@ -125,6 +132,15 @@ sub limited {
 	};
 	return 0 if $@;
 	return 1;
+}
+
+# Class for testing...
+package DummyObj;
+sub new { return bless {}; }
+sub param {
+	my ($self,$key,$val) = @_;
+	$self->{$key} = $val if defined($val);
+	return $self->{$key};
 }
 
 __END__

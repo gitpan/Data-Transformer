@@ -48,6 +48,12 @@ SYNOPSIS
      print "Number of nodes: $nodes\n";
      print "Size of keys + values: $size\n";
 
+     # D: OBJECTS INSIDE A DATA STRUCTURE
+     # Affect objects by using the class name as a key:
+     my $t = Data::Transformer->new(
+        'My::Class' => sub { shift->set_foo('bar') }
+     );
+
 DESCRIPTION
   Data type callbacks
     The basic idea is that you provide a callback subroutine for each type
@@ -68,14 +74,17 @@ DESCRIPTION
 
     The array and hash types are special in that they are traversed into.
 
-    Objects (i.e. blessed references) inside the data structure are
-    currently ignored, though this may change in later versions.
+    It is possible to affect objects inside the data structure by specifying
+    a callback keyed to the name of the class they belong to. They are not
+    automatically recursed into, however, even if they happen to be blessed
+    hash or array references.
 
-    Note that a scalar reference is not automatically traversed into, even
+    Similarly, a scalar reference is not automatically traversed into, even
     if it may contain a reference to an arrayref or a hashref. To make the
     module traverse into scalar references, you need to return a coderef
     encapsulating a different data type in the scalar handler, thus changing
-    them (and prompting a reiteration over that data point).
+    them (and prompting a reiteration over that data point). This applies to
+    objects as well.
 
   Additional option for the constructor
     node_limit:
@@ -88,13 +97,14 @@ DESCRIPTION
     different from both the number of nodes in the actual data structure and
     the number of nodes after the transformation, for the following reasons:
 
-     * Reiteration into a particular node may have occurred (see below),
-       which increments the node count.
+     * Reiteration into a particular node may have occurred, which
+       increments the node count.
 
-     * Blessed references (objects) will not be iterated into.
+     * Blessed references (objects) will not normally be iterated into,
+       but are merely treated as leaves in the data structure.
 
-     * The processing code passed to the constructor will as often as not
-       affect the number of nodes.
+     * The processing code passed to the constructor may well affect the
+       number of nodes.
 
   Note on data type changes
     If you want to change a data type (for instance replace an array by a
@@ -110,12 +120,12 @@ DESCRIPTION
     Also, because of reiteration, complex changes of large data structures
     may require setting the node processing limit higher than the default.
 
-CAVEATS
-    This module should be quite suitable for hierarchial data structures
-    (such as something made by XML::Simple), while anything more
-    complicated, especially if it contains circular references, will often
-    cause it problems.
+  Note on circular references
+    Data structures containing circular references should not cause
+    problems. Data::Transformer will skip any node containing a reference
+    which has already been processed.
 
+CAVEATS
     It is not feasible to use this module for very large data structures.
     Accordingly, there is a hard node processing boundary of 2**20-1 (about
     1 million); attempting to set the limit higher results in an immediate,
